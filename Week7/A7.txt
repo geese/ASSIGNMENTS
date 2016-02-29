@@ -1,0 +1,141 @@
+USE CHODOS_TRAMS
+GO
+
+IF EXISTS(SELECT name FROM sys.objects WHERE name = 'GetLodgingTaxRate')
+	DROP FUNCTION GetLodgingTaxRate;
+
+GO
+
+CREATE FUNCTION  dbo.GetLodgingTaxRate
+(
+		@PropID			smallint
+	,	@date			date
+)
+RETURNS decimal(5,3)
+AS
+	BEGIN
+			DECLARE @result decimal(5,3)			
+			SET @result = 
+				   (SELECT TaxRate
+					FROM TaxRate tr
+					JOIN Property p
+						ON tr.TaxLocationID = p.TaxLocationID 
+						AND tr.TaxType = 'L'
+						AND p.PropertyID = @PropID
+						
+						AND (
+							(@date BETWEEN tr.TaxStartDate AND tr.TaxEndDate)
+							OR 
+							(@date > tr.TaxStartDate AND   tr.TaxEndDate IS NULL)
+							)
+					)
+			IF @result IS NULL
+				BEGIN
+					SET @result = 0
+				END
+			RETURN @result
+	END	
+
+GO
+
+SELECT dbo.GetLodgingTaxRate(10000,'3/1/16')
+
+GO
+
+IF EXISTS(SELECT name FROM sys.objects WHERE name = 'CalculateDeposit')
+	DROP FUNCTION CalculateDeposit
+GO
+
+CREATE FUNCTION dbo.CalculateDeposit
+(
+		@UnitRateID		smallint
+	,	@CheckInDate	date
+)
+RETURNS smallmoney
+AS
+	BEGIN
+		DECLARE @CurrentRate smallmoney = (SELECT UnitRate FROM UnitRate WHERE UnitRateID = @UnitRateID)
+		DECLARE @PropID smallint = (SELECT PropertyID FROM UnitRate WHERE UnitRateID = @UnitRateID)
+
+		DECLARE @result smallmoney
+		SET @result = @CurrentRate * (1 + (.01 * dbo.GetLodgingTaxRate(@PropID,@CheckInDate)))
+
+		RETURN @result
+	END
+GO
+
+SELECT dbo.CalculateDeposit(42,'3/1/16')
+
+
+IF EXISTS(SELECT * FROM INFORMATION_SCHEMA.ROUTINES WHERE SPECIFIC_NAME = 'sp_InsertReservation')
+	DROP PROCEDURE sp_InsertReservation
+	
+GO
+
+CREATE PROCEDURE sp_InsertReservation
+		@ResDate			smalldatetime
+	,	@ResStatus			char(1)
+	,	@ResCheckInDate		date
+	,	@ResNights			tinyint
+	,	@ResQuotedRate		smallmoney
+	,	@ResDepositPaid		smallmoney
+	,	@ResCCAuth			varchar(25)
+	,	@UnitRateID			smallint
+	,	@PersonID			int
+
+AS
+BEGIN
+	INSERT INTO Reservation
+	VALUES(@ResDate, @ResStatus, @ResCheckInDate, @ResNights, @ResQuotedRate, @ResDepositPaid, @ResCCAuth, @UnitRateID, @PersonID)
+END
+
+GO
+
+
+DECLARE @DateToday smalldatetime = GETDATE()
+DECLARE @CheckInDate date = '15 Aug 2015'
+DECLARE @QuotedRate smallmoney = dbo.CalculateDeposit(13, @CheckInDate)
+
+EXEC sp_InsertReservation
+		@ResDate			=	@DateToday
+	,	@ResStatus			=	'A'
+	,	@ResCheckInDate		=	@CheckInDate
+	,	@ResNights			=	3
+	,	@ResQuotedRate		=	@QuotedRate
+	,	@ResDepositPaid		=	@QuotedRate
+	,	@ResCCAuth			=	'3A Results'
+	,	@UnitRateID			=	13
+	,	@PersonID			=	7
+			
+
+SET @CheckInDate = '27 Aug 2015'
+SET @QuotedRate = dbo.CalculateDeposit(21, @CheckInDate)
+
+EXEC sp_InsertReservation
+		@ResDate			=	@DateToday
+	,	@ResStatus			=	'A'
+	,	@ResCheckInDate		=	@CheckInDate
+	,	@ResNights			=	3
+	,	@ResQuotedRate		=	@QuotedRate
+	,	@ResDepositPaid		=	@QuotedRate
+	,	@ResCCAuth			=	'3B Results'
+	,	@UnitRateID			=	21
+	,	@PersonID			=	8
+
+
+SET @CheckInDate = '25 Sep 2015'
+SET @QuotedRate = dbo.CalculateDeposit(29, @CheckInDate)
+
+EXEC sp_InsertReservation
+		@ResDate			=	@DateToday
+	,	@ResStatus			=	'A'
+	,	@ResCheckInDate		=	@CheckInDate
+	,	@ResNights			=	3
+	,	@ResQuotedRate		=	@QuotedRate
+	,	@ResDepositPaid		=	@QuotedRate
+	,	@ResCCAuth			=	'3C Results'
+	,	@UnitRateID			=	29
+	,	@PersonID			=	9
+
+
+SELECT * FROM Reservation

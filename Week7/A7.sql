@@ -212,38 +212,45 @@ CREATE FUNCTION dbo.fn_QuotedRate
 )
 RETURNS @ValidRates	TABLE
 (
-		[MaxRate]	[smallmoney]	NOT NULL,
-	[UnitTypeDesc]	varchar(20)  NOT NULL,
-	[UnitRateDesc]  varchar(50)  NULL
+		[Max Rate]	[smallmoney]	NOT NULL,
+	[Unit Type]	varchar(18)  NOT NULL,
+	[Unit Rate Description]  varchar(60)  NULL
 )
 AS
 	BEGIN
-		INSERT INTO @ValidRates 
-		SELECT ur.UnitRate, ut.UnitTypeDescription, ur.UnitRateDescription
-		FROM UnitRate ur
-		JOIN UnitType ut
-			ON ur.UnitTypeID = ut.UnitTypeID
-			AND ur.PropertyID = @PropID
-			AND ut.UnitTypeID = @UnitTypeID
-		WHERE @BeginDate BETWEEN ur.UnitRateBeginDate AND ur.UnitRateEndDate			
+		IF DATEDIFF(day, @BeginDate, @EndDate) < 0
+			BEGIN
+			INSERT INTO @ValidRates
+			VALUES(0, CONCAT(REPLICATE(' ',5),'----'), CONCAT(CONVERT(char(12),@BeginDate,107), ' - ', CONVERT(char(12),@EndDate,107), ' is not a valid date range.'))
+			END
+		ELSE
+		BEGIN
+			INSERT INTO @ValidRates 
+			SELECT ur.UnitRate, ut.UnitTypeDescription, ur.UnitRateDescription
+			FROM UnitRate ur
+			JOIN UnitType ut
+				ON ur.UnitTypeID = ut.UnitTypeID
+				AND ur.PropertyID = @PropID
+				AND ut.UnitTypeID = @UnitTypeID
+			WHERE @BeginDate BETWEEN ur.UnitRateBeginDate AND ur.UnitRateEndDate			
 		
-		UNION
+			UNION
 
-		SELECT ur.UnitRate, ut.UnitTypeDescription, ur.UnitRateDescription
-		FROM UnitRate ur
-		JOIN UnitType ut
-			ON ur.UnitTypeID = ut.UnitTypeID
-			AND ur.PropertyID = @PropID
-			AND ut.UnitTypeID = @UnitTypeID
-		WHERE @EndDate BETWEEN ur.UnitRateBeginDate AND ur.UnitRateEndDate
+			SELECT ur.UnitRate, ut.UnitTypeDescription, ur.UnitRateDescription
+			FROM UnitRate ur
+			JOIN UnitType ut
+				ON ur.UnitTypeID = ut.UnitTypeID
+				AND ur.PropertyID = @PropID
+				AND ut.UnitTypeID = @UnitTypeID
+			WHERE @EndDate BETWEEN ur.UnitRateBeginDate AND ur.UnitRateEndDate
 		
-		DECLARE @MaxRate smallmoney = 
-			(SELECT MAX(MaxRate)
-			FROM @ValidRates)
+			DECLARE @MaxRate smallmoney = 
+				(SELECT MAX([Max Rate])
+				FROM @ValidRates)
 			
-		DELETE @ValidRates
-		WHERE MaxRate != @MaxRate
-			 
+			DELETE @ValidRates
+			WHERE [Max Rate]!= @MaxRate
+		END
 
 		
 	RETURN
@@ -252,3 +259,5 @@ AS
 GO
 
 SELECT * FROM dbo.fn_QuotedRate('1 july, 2015', '30 NOV, 2015',10000,4) 
+SELECT * FROM dbo.fn_QuotedRate('1 july, 2015', '30 NOV, 2015',11000,4)
+SELECT * FROM dbo.fn_QuotedRate('30 NOV, 2015', '1 july, 2015',11000,4)  
